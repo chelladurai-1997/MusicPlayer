@@ -6,7 +6,6 @@ import express from "express";
 import { mongoose } from "mongoose";
 import dotenv from "dotenv";
 import { Song } from "./app/songSchema.js";
-import { networkInterfaces } from "node:os";
 
 const app = express();
 const port = 3000;
@@ -22,6 +21,9 @@ const connect = async () => {
 
     connection.on("connected", () => {
       console.log("MongoDB connected successfully");
+      app.listen(port, () => {
+        console.log(`Example app listening on port ${port}`);
+      });
     });
 
     connection.on("error", (err) => {
@@ -303,10 +305,6 @@ async function scrapeAlbumInfos(pagesUrl) {
     console.error(err);
   }
 }
-
-app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
-});
 
 async function getImages() {
   try {
