@@ -62,12 +62,20 @@ job.start();
 // You can stop the cron job using job.stop() when needed
 
 app.get("/api/songs", async (req, res) => {
+  const page = parseInt(req.query.page) || 1; // Get the requested page number from query parameters (default to page 1 if not provided)
+  const limit = parseInt(req.query.limit) || 10; // Set a default limit per page (e.g., 10)
+
   try {
-    const songs = await Song.find(); // Retrieve all documents from the collection
+    const skip = (page - 1) * limit; // Calculate the number of documents to skip based on the page number and limit
+    const query = Song.find({}).skip(skip).limit(limit).sort({ year: -1 }); // Sort by year in descending order, adjust sorting as needed
+    const songs = await query.exec();
+
     res.json({
-      totalCount: songs?.length,
+      totalCount: await Song.countDocuments(), // Get the total count of documents in the collection
+      currentPage: page,
+      totalPages: Math.ceil((await Song.countDocuments()) / limit), // Calculate the total number of pages
       data: songs,
-    }); // Send the data as a JSON response
+    });
   } catch (error) {
     console.error("Error retrieving data:", error);
     res.status(500).json({ error: "Internal Server Error" });
@@ -91,7 +99,7 @@ app.get("/api/search-songs", async (req, res) => {
     };
 
     // Find songs based on the search filter
-    const songs = await Song.find(searchFilter);
+    const songs = await Song.find(searchFilter).limit(10).exec();
 
     if (songs.length === 0) {
       res.status(404).json({ error: "No matching songs found" });
