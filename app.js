@@ -196,6 +196,16 @@ const job = cron.schedule(
 // Start the cron job
 job.start();
 
+app.get("/fetch", () => {
+  // This function will be executed at 6 AM every day
+  [...new Array(5)].forEach((n, i) => {
+    const lookUpYear = getRandomYear() - i;
+    scrapeYearSpecificMoviesData(
+      `https://isaiminisong.com/songs/tamil-${lookUpYear}-songs/`
+    );
+  });
+});
+
 // You can stop the cron job using job.stop() when needed
 
 app.get("/api/songs", async (req, res) => {
