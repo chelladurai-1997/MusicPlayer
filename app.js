@@ -1,14 +1,22 @@
 import axios from "axios";
 import cheerio from "cheerio";
 import cron from "node-cron";
-import * as fs from "node:fs";
 import express from "express";
 import { mongoose } from "mongoose";
 import dotenv from "dotenv";
+import bodyParser from "body-parser";
+
 import { Song } from "./app/songSchema.js";
+import { User, LikedSong } from "./app/userSchema.js";
 
 const app = express();
+
+// Middleware to parse JSON data in the request body
+app.use(bodyParser.json());
 const port = 3000;
+
+// parse application/json
+app.use(bodyParser.json());
 
 dotenv.config();
 const connect = async () => {
@@ -39,15 +47,144 @@ const connect = async () => {
 };
 connect();
 
+// Define a POST route for user registration
+app.post("/register", async (req, res) => {
+  try {
+    // Extract user data from the request body
+    const { email, password } = req.body;
+
+    // Create a new user using the User model
+    const newUser = new User({
+      email,
+      password,
+    });
+
+    // Save the user to the database using await
+    const user = await newUser.save();
+
+    console.log("User created:", user);
+    res.status(201).json({ message: "User registered successfully" });
+  } catch (error) {
+    console.error("Error creating user:", error);
+
+    if (error.code === 11000) {
+      // MongoDB error code 11000 indicates a duplicate key error
+      return res.status(200).json({ message: "email-Id is already in use" });
+    }
+    res.status(500).json({ message: "Error registering user", error: error });
+  }
+});
+
+// Create a LikedSong and associate it with a User
+app.post("/users/:userId/liked-songs", async (req, res) => {
+  const userId = req.params.userId;
+  const { songId } = req.body; // Assuming you provide the song ID in the request body
+
+  try {
+    // Check if the user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Check if the song exists
+    const song = await Song.findById(songId);
+    if (!song) {
+      return res.status(404).json({ message: "Song not found" });
+    }
+
+    // Create a new LikedSong and associate it with the user
+    const likedSong = new LikedSong({ song: songId });
+    user.likedSongs.push(likedSong);
+
+    // Save the user and the liked song
+    await user.save();
+    await likedSong.save();
+
+    return res.status(201).json({ message: "Song added to liked songs" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// Retrieve all liked songs for a user
+app.get("/users/:userId/liked-songs", async (req, res) => {
+  const userId = req.params.userId;
+
+  try {
+    // Check if the user exists and populate their liked songs
+    const user = await User.findById(userId).populate({
+      path: "likedSongs",
+      populate: {
+        path: "song", // Populates the 'song' field within 'likedSongs'
+        model: "Song",
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const likedSongs = user.likedSongs;
+
+    return res.status(200).json({ likedSongs });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// Remove a liked song for a user based on songId
+app.post("/users/:userId/remove-liked-song/:songId", async (req, res) => {
+  const userId = req.params.userId;
+  const songId = req.params.songId;
+
+  try {
+    // Check if the user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Find the liked song by matching the songId in the LikedSong collection
+    const likedSong = await LikedSong.findOne({ song: songId });
+
+    if (!likedSong) {
+      return res
+        .status(404)
+        .json({ message: "Liked song not found for this user" });
+    }
+
+    // Remove the liked song from the user's likedSongs array
+    const likedSongIndex = user.likedSongs.indexOf(likedSong._id);
+
+    if (likedSongIndex !== -1) {
+      user.likedSongs.splice(likedSongIndex, 1);
+    }
+
+    // Save the updated user document
+    await user.save();
+
+    // Remove the liked song from the LikedSong collection using deleteOne
+    await LikedSong.deleteOne({ _id: likedSong._id });
+
+    return res.status(200).json({ message: "Liked song removed successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 // Schedule the job to run every day at 6 AM (0 6 * * *)
 const job = cron.schedule(
-  "0 6 * * *",
+  "*/5 * * * *",
   () => {
     // This function will be executed at 6 AM every day
-
-    [...new Array(53)].forEach((n, i) => {
+    [...new Array(5)].forEach((n, i) => {
+      const lookUpYear = getRandomYear() - i;
       scrapeYearSpecificMoviesData(
-        `https://isaiminisong.com/songs/tamil-${1970 + i}-songs/`
+        `https://isaiminisong.com/songs/tamil-${lookUpYear}-songs/`
       );
     });
   },
@@ -314,27 +451,9 @@ async function scrapeAlbumInfos(pagesUrl) {
   }
 }
 
-async function getImages() {
-  try {
-    const yearSpeficUrl =
-      "https://www.google.com/search?sca_esv=566121062&rlz=1C1RXQR_enIN962IN962&hl=en&q=Vettaikaran+hd+images+download&uds=H4sIAAAAAAAA_-Ny5uJwyS_Py8lPTBESLUstKUnMzE4sSsxTyEhRyMxNTE8tNhAqkgvDJqGQAtVohF0jACoOP0xcAAAA&tbm=isch&source=lnms&sa=X&ved=2ahUKEwiHiYbWv7KBAxW5TWwGHTa-BykQ0pQJegQICxAB&biw=1280&bih=563&dpr=1.5";
-    // Fetch HTML of the page we want to scrape
-    const { data } = await axios.get(yearSpeficUrl);
-    // Load HTML we fetched in the previous line
-    const $ = cheerio.load(data);
-    // Select all the 'img' elements and get their 'src' attributes
-    const imageSrcs = [];
-
-    $("img").each((index, element) => {
-      const src = $(element).attr("src");
-      if (src?.includes("https")) {
-        imageSrcs.push(src);
-      }
-    });
-
-    // Display the image source URLs
-    console.log(imageSrcs);
-  } catch (err) {
-    console.error(err);
-  }
+function getRandomYear() {
+  const currentYear = new Date().getFullYear();
+  const minYear = 1980;
+  const range = currentYear - minYear + 1;
+  return minYear + Math.floor(Math.random() * range);
 }
