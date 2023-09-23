@@ -5,6 +5,7 @@ import express from "express";
 import { mongoose } from "mongoose";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
+import birds from "./birds.js";
 
 import { Song } from "./app/songSchema.js";
 import { User, LikedSong } from "./app/userSchema.js";
@@ -467,3 +468,5 @@ function getRandomYear() {
   const range = currentYear - minYear + 1;
   return minYear + Math.floor(Math.random() * range);
 }
+
+app.use("/birds", birds);
