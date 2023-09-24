@@ -25,7 +25,5 @@ const songSchema = new mongoose.Schema(
   }
 );
 
-songSchema.index({ year: -1 }); // 1 for ascending order, -1 for descending
-
 // Create a Mongoose model from the schema
 export const Song = mongoose.model("Song", songSchema);

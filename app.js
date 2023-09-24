@@ -246,7 +246,7 @@ app.get("/api/search-songs", async (req, res) => {
     };
 
     // Find songs based on the search filter
-    const songs = await Song.find(searchFilter).limit(10).exec();
+    const songs = await Song.find(searchFilter).limit(500).exec();
 
     if (songs.length === 0) {
       res.status(404).json({ error: "No matching songs found" });
