@@ -20,7 +20,10 @@
     "mongoose": "^7.5.2",
     "node-cron": "^3.0.2",
     "nodeman": "^1.1.2",
-    "pretty": "^2.0.0"
+    "pretty": "^2.0.0",
+    "puppeteer": "^21.4.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "engines": {
     "node": "18.x"

@@ -5,6 +5,7 @@ import express from "express";
 import { mongoose } from "mongoose";
 import dotenv from "dotenv";
 import bodyParser from "body-parser";
+import puppeteer from "puppeteer-extra";
 
 import { Song } from "./app/songSchema.js";
 import { User, LikedSong } from "./app/userSchema.js";
@@ -46,6 +47,118 @@ const connect = async () => {
   }
 };
 connect();
+
+app.get("/getComments/:url", (req, res) => {
+  const url = req.params.url;
+  const videoUrl = `https://www.youtube.com/watch?v=${url}`;
+  const maxScrolls = 5; // Adjust this value based on how many times you want to scroll
+
+  // Helper function to validate and clean text
+
+  async function scrapeComments(videoUrl, maxScrolls) {
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+    await page.goto(videoUrl);
+
+    // Scroll to the bottom of the page with a configurable number of scrolls
+    await autoScroll(page, maxScrolls);
+
+    // Extract comments
+    const comments = await page.evaluate(() => {
+      const commentElements = document.querySelectorAll(
+        "ytd-comment-thread-renderer"
+      );
+
+      const commentsArray = [];
+      function validateAndClean(text) {
+        // Check if the text is a valid string
+        if (typeof text !== "string") {
+          return ""; // Return an empty string if the input is not a string
+        }
+
+        // Remove leading and trailing whitespaces
+        let cleanedText = text.trim();
+
+        // Handle special characters (remove or replace as needed)
+        cleanedText = cleanedText.replace(
+          /[^\w\s\u0B80-\u0BFF.?!@#$%^&*()-]/g,
+          ""
+        );
+
+        return cleanedText;
+      }
+
+      commentElements.forEach((commentElement) => {
+        const author = commentElement.querySelector("#author-text").innerText;
+        const timestamp = validateAndClean(
+          commentElement.querySelector(".published-time-text").innerText
+        );
+        const content = validateAndClean(
+          commentElement.querySelector("#content-text").innerText
+        );
+        const likes = validateAndClean(
+          commentElement.querySelector("#vote-count-middle").innerText
+        );
+
+        commentsArray.push({
+          author,
+          timestamp,
+          content,
+          likes,
+        });
+      });
+
+      return commentsArray;
+    });
+
+    await browser.close();
+
+    return comments;
+  }
+
+  // Function to scroll to the bottom of the page
+  async function autoScroll(page, maxScrolls) {
+    await page.evaluate(async (maxScrolls) => {
+      await new Promise((resolve) => {
+        let totalHeight = 0;
+        const distance = 500;
+
+        const timer = setInterval(() => {
+          const scrollHeight = document.documentElement.scrollHeight;
+
+          window.scrollBy(0, distance);
+          totalHeight += distance;
+
+          if (totalHeight >= scrollHeight || maxScrolls === 0) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 1000); // You can adjust the interval if needed
+      });
+    }, maxScrolls);
+  }
+
+  scrapeComments(videoUrl, maxScrolls)
+    .then((comments) => {
+      const sorted = comments.sort((a, b) => {
+        const likesA = a.likes?.includes("K")
+          ? Number(Number(a.likes.replace("K", "")) * 1000)
+          : Number(a.likes); // Convert '1.5K' to 1500
+        const likesB = b.likes?.includes("K")
+          ? Number(Number(b.likes.replace("K", "")) * 1000)
+          : Number(b.likes); // Convert '1.5K' to 1500
+
+        return likesB - likesA;
+      });
+      res.json({ count: sorted?.length, comments: sorted?.slice(0, 50) });
+      console.log(comments?.length);
+      console.log(JSON.stringify(comments, null, 2));
+    })
+    .catch((error) => {
+      console.error("Error:", error);
+      res.json({ err: true });
+    });
+});
 
 // Define a POST route for user registration
 app.post("/register", async (req, res) => {
